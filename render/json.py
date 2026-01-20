@@ -1,20 +1,20 @@
 """
 sap2/render/json.py
 
-JSON rendering helpers for SAP² outputs.
+JSON rendering for SAP² outputs.
 
-This module must remain presentation-only:
-- no applicability logic
-- no decoding logic
-- no heuristics
+Presentation-only:
+- No applicability logic
+- No decoding logic
+- No heuristics
 
-It focuses on robust serialization of dataclasses and enums.
+Provides robust serialization for dataclasses, enums, and common containers.
 """
 
 from __future__ import annotations
 
 import json
-from dataclasses import is_dataclass, asdict
+from dataclasses import asdict, is_dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -22,11 +22,8 @@ from typing import Any, Mapping, Sequence
 
 def to_jsonable(obj: Any) -> Any:
     """
-    Convert common SAP² objects (dataclasses, enums, paths) into JSON-serializable structures.
-
-    This function is deliberately conservative:
-    - It never invents values.
-    - It only transforms representation.
+    Convert SAP² objects into JSON-serializable structures.
+    Conservative: transforms representation only.
     """
     if obj is None:
         return None
@@ -41,7 +38,7 @@ def to_jsonable(obj: Any) -> Any:
         return obj.value
 
     if is_dataclass(obj):
-        # asdict recursively converts nested dataclasses, but may keep Enums; post-process after.
+        # asdict converts nested dataclasses to dict/list, but may keep Enums; post-process recursively.
         return to_jsonable(asdict(obj))
 
     if isinstance(obj, Mapping):
@@ -53,15 +50,14 @@ def to_jsonable(obj: Any) -> Any:
     if isinstance(obj, Sequence) and not isinstance(obj, (str, bytes, bytearray)):
         return [to_jsonable(v) for v in obj]
 
-    # Fallback: last-resort string representation (explicit and inspectable)
+    # Last-resort fallback: explicit string representation
     return str(obj)
 
 
 def write_json(path: str | Path, payload: Any, *, indent: int = 2) -> Path:
     """
-    Write a JSON file to `path`.
-
-    Returns the resolved Path to the written file.
+    Write payload to path as JSON.
+    Returns the resolved output path.
     """
     out = Path(path)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -74,9 +70,9 @@ def write_json(path: str | Path, payload: Any, *, indent: int = 2) -> Path:
     return out.resolve()
 
 
-def write_json_bundle(output_dir: str | Path, name: str, payload: Any) -> Path:
+def write_json_bundle(output_dir: str | Path, name: str, payload: Any, *, indent: int = 2) -> Path:
     """
     Convenience helper: writes <output_dir>/<name>.json
     """
     output_dir = Path(output_dir)
-    return write_json(output_dir / f"{name}.json", payload)
+    return write_json(output_dir / f"{name}.json", payload, indent=indent)
