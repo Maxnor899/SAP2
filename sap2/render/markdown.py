@@ -78,8 +78,9 @@ def render_pipeline_run(
             for method_id in sorted(reports.keys()):
                 rep = reports[method_id]
                 status = _get(rep, "status", "?")
-                missing = _len(_get(rep, "missing_required", []))
-                unstable = _len(_get(rep, "unstable_required", []))
+                # FIX: Use correct field names from ApplicabilityReport
+                missing = _len(_get(rep, "missing_inputs", {}))
+                unstable = _len(_get(rep, "unstable_inputs", {}))
                 lines.append(f"| `{method_id}` | `{status}` | {missing} | {unstable} |")
 
             lines.append("")
