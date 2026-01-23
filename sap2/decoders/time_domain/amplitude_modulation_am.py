@@ -1,5 +1,7 @@
 """
-Amplitude Modulation (AM) Decoder - sap2/decoders/modulation/amplitude_modulation_am.py
+sap2/decoders/time_domain/amplitude_modulation_am.py
+
+Amplitude Modulation (AM) Decoder.
 
 Produces decoding hypotheses from interval-based discretization.
 No interpretation, no claim of correctness.
@@ -31,7 +33,7 @@ def _bits_to_int(bits: List[int], msb_first: bool) -> int:
         for b in bits:
             value = (value << 1) | (b & 1)
         return value
-    # LSB-first
+
     value = 0
     for i, b in enumerate(bits):
         value |= ((b & 1) << i)
@@ -80,22 +82,30 @@ def _decode_ascii_candidates(
 @dataclass(frozen=True)
 class AmplitudeModulationAmDecoder:
     method_id: str = "amplitude_modulation_am"
-    version: str = "1.0.0"
+    version: str = "1.1.0"
 
     def decode(self, bundle: InputBundle, params: DecoderParams) -> ExperimentResult:
-        # --- Retrieve inputs ---
+        # Retrieve inputs
         delta: Input = bundle.get("Δ")
         sym: Input = bundle.get("S")
         vec: Input = bundle.get("V")
 
         if not delta.available or not delta.data or "intervals" not in delta.data:
-            return refused(self.method_id, self.version, "Δ intervals missing in InputBundle (pulse_detection not available or insufficient events).")
+            return refused(
+                self.method_id,
+                self.version,
+                "Δ intervals missing in InputBundle (pulse_detection not available or insufficient events).",
+            )
 
         intervals = delta.data["intervals"]
         if not isinstance(intervals, list) or len(intervals) < 8:
-            return refused(self.method_id, self.version, f"Δ intervals too short for framing hypotheses: got {len(intervals) if isinstance(intervals, list) else 'invalid'}.")
+            return refused(
+                self.method_id,
+                self.version,
+                f"Δ intervals too short for framing hypotheses: got {len(intervals) if isinstance(intervals, list) else 'invalid'}.",
+            )
 
-        # --- Optional diagnostics from V ---
+        # Optional diagnostics from V
         v_am: Optional[Dict[str, Any]] = None
         if vec.available and vec.data and isinstance(vec.data, dict):
             vectors = vec.data.get("vectors", {})
@@ -108,8 +118,7 @@ class AmplitudeModulationAmDecoder:
         else:
             diagnostics.append("V.am_detection not present (SAT did not run am_detection or data not exported).")
 
-        # --- Build bitstream hypotheses ---
-        # Prefer S if present (already explicit median discretization).
+        # Build bitstream hypotheses
         bitstreams: List[Dict[str, Any]] = []
 
         def _add_bitstream(bits: List[int], origin: str, mapping: str) -> None:
@@ -125,17 +134,15 @@ class AmplitudeModulationAmDecoder:
         if sym.available and sym.data and isinstance(sym.data, dict) and "symbols" in sym.data:
             symbols = sym.data.get("symbols", [])
             if isinstance(symbols, list) and symbols:
-                # Hypothesis A: short->0, long->1
                 bits_a = [0 if s == "short" else 1 for s in symbols]
                 _add_bitstream(bits_a, origin="S.symbols", mapping="short=0,long=1")
 
-                # Hypothesis B: short->1, long->0 (explicit alternative)
                 bits_b = [1 if s == "short" else 0 for s in symbols]
                 _add_bitstream(bits_b, origin="S.symbols", mapping="short=1,long=0")
             else:
                 diagnostics.append("S available but symbols list is empty or invalid.")
         else:
-            # Fallback: discretize Δ by median (explicit, documented here)
+            # Fallback: discretize Δ by median (explicit)
             try:
                 sorted_vals = sorted(float(x) for x in intervals)
                 median = sorted_vals[len(sorted_vals) // 2]
@@ -150,7 +157,7 @@ class AmplitudeModulationAmDecoder:
             bits_b = [1 if float(x) < median else 0 for x in intervals]
             _add_bitstream(bits_b, origin="Δ.intervals", mapping=f"<median=1,>=median=0 (median={median:.6f})")
 
-        # --- Generate ASCII hypotheses (structural, not interpretative) ---
+        # Generate ASCII hypotheses (structural, not interpretative)
         frame_bits_list = params.get("frame_bits_list", [8, 7])
         max_offsets = int(params.get("max_offsets", 8))
         msb_first_list = params.get("msb_first_list", [True, False])
@@ -162,8 +169,7 @@ class AmplitudeModulationAmDecoder:
             bits = bs["bits"]
             for frame_bits in frame_bits_list:
                 for msb_first in msb_first_list:
-                    # Try a limited number of offsets to avoid brute-force explosion
-                    for offset in range(min(max_offsets, max(frame_bits, 1))):
+                    for offset in range(min(max_offsets, max(int(frame_bits), 1))):
                         text, printable_ratio = _decode_ascii_candidates(
                             bits=bits,
                             frame_bits=int(frame_bits),
@@ -186,19 +192,41 @@ class AmplitudeModulationAmDecoder:
                             }
                         )
 
-        # Keep best candidates only (by printable_ratio, then by length)
         candidates.sort(key=lambda c: (c["printable_ratio"], len(c["text_candidate"])), reverse=True)
         candidates = candidates[:max_hypotheses]
 
-        # --- Build result ---
+        # Normalized hypotheses
+        hypotheses: List[Dict[str, Any]] = []
+        for h in candidates:
+            hypotheses.append(
+                {
+                    "level": "ascii",
+                    "representation": h["text_candidate"],
+                    "parameters": {
+                        "frame_bits": h["framing"]["frame_bits"],
+                        "msb_first": h["framing"]["msb_first"],
+                        "offset": h["framing"]["offset"],
+                        "origin": h["source_bitstream"]["origin"],
+                        "mapping": h["source_bitstream"]["mapping"],
+                    },
+                    "scores": {
+                        "printable_ratio": float(h["printable_ratio"]),
+                    },
+                    "notes": [],
+                }
+            )
+
         artifacts: Dict[str, Any] = {
-            "bitstream_hypotheses": [
-                {k: v for k, v in bs.items() if k != "bits"} for bs in bitstreams
-            ],
-            "ascii_hypotheses": candidates,
+            "hypotheses": hypotheses,
+            "raw": {
+                "bitstream_hypotheses": [
+                    {k: v for k, v in bs.items() if k != "bits"} for bs in bitstreams
+                ],
+                "ascii_hypotheses": candidates,
+            },
         }
 
-        # Provide small preview of the best candidate in diagnostics (still a hypothesis)
+        # Small preview in diagnostics (still a hypothesis)
         if candidates:
             best = candidates[0]
             diagnostics.append(
@@ -224,4 +252,3 @@ class AmplitudeModulationAmDecoder:
                 "V": vec.provenance.__dict__,
             },
         )
-

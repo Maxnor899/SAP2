@@ -24,6 +24,9 @@ from sap2.decoders.base import Decoder
 
 # Import concrete decoders explicitly (traceability > auto-discovery)
 from sap2.decoders.time_domain.duration_based_morse_like import DurationBasedMorseLikeDecoder
+from sap2.decoders.time_domain.amplitude_modulation_am import AmplitudeModulationAmDecoder
+
+
 
 # NOTE: Keep future decoders commented out until they are implemented.
 # from sap2.decoders.time_frequency.spectral_stability_encoding import SpectralStabilityEncodingDecoder
@@ -35,6 +38,7 @@ _DECODERS: Dict[str, Decoder] = {
     DurationBasedMorseLikeDecoder.method_id: DurationBasedMorseLikeDecoder(),
     # SpectralStabilityEncodingDecoder.method_id: SpectralStabilityEncodingDecoder(),
     # PhaseDeltaDecoder.method_id: PhaseDeltaDecoder(),
+    AmplitudeModulationAmDecoder.method_id: AmplitudeModulationAmDecoder(),
 }
 
 

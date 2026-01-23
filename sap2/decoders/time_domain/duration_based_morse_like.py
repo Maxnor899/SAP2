@@ -47,7 +47,7 @@ class DurationBasedMorseLikeDecoder(Decoder):
     """
 
     method_id = "duration_based_morse_like"
-    version = "0.1.0"
+    version = "0.2.0"
 
     def decode(self, bundle: InputBundle, params: DecoderParams) -> ExperimentResult:
         delta = bundle.get("Δ")
@@ -116,7 +116,7 @@ class DurationBasedMorseLikeDecoder(Decoder):
                 reason=f"Invalid parameters: dot_max ({dot_max}) must be < dash_min ({dash_min}).",
             )
 
-        if (letter_gap_min_f is not None) and (letter_gap_min_f <= 0.0):
+        if (letter_gap_minJMin_f is not None) and (letter_gap_min_f <= 0.0):
             return refused(
                 method_id=self.method_id,
                 version=self.version,
@@ -128,7 +128,11 @@ class DurationBasedMorseLikeDecoder(Decoder):
                 version=self.version,
                 reason=f"Invalid parameter: word_gap_min must be > 0 (got {word_gap_min_f}).",
             )
-        if (letter_gap_min_f is not None) and (word_gap_min_f is not None) and (letter_gap_min_f >= word_gap_min_f):
+        if (
+            (letter_gap_min_f is not None)
+            and (word_gap_min_f is not None)
+            and (letter_gap_min_f >= word_gap_min_f)
+        ):
             return refused(
                 method_id=self.method_id,
                 version=self.version,
@@ -200,9 +204,48 @@ class DurationBasedMorseLikeDecoder(Decoder):
             f"bitstream counts: bits={n_bits}, none={n_none} (ambiguous + separators map to None)",
         ]
 
+        # Normalized hypothesis (structural, not interpretative)
+        total = float(len(intervals))
+        dot_ratio = (n_dot / total) if total > 0 else 0.0
+        dash_ratio = (n_dash / total) if total > 0 else 0.0
+        ambiguous_ratio = (n_ambiguous / total) if total > 0 else 0.0
+
+        notes: List[str] = []
+        if (n_dot == 0) or (n_dash == 0):
+            notes.append("degenerate_single_class")
+        if (
+            (letter_gap_min_f is not None or word_gap_min_f is not None)
+            and (n_letter_sep == 0 and n_word_sep == 0)
+        ):
+            notes.append("no_separators_emitted")
+
+        hypotheses: List[Dict[str, Any]] = [
+            {
+                "level": "symbols",
+                "representation": "".join(symbol_stream),
+                "parameters": {
+                    "dot_max": dot_max,
+                    "dash_min": dash_min,
+                    "letter_gap_min": letter_gap_min_f,
+                    "word_gap_min": word_gap_min_f,
+                    "dot_bit": dot_bit,
+                    "dash_bit": dash_bit,
+                },
+                "scores": {
+                    "dot_ratio": float(dot_ratio),
+                    "dash_ratio": float(dash_ratio),
+                    "ambiguous_ratio": float(ambiguous_ratio),
+                },
+                "notes": notes,
+            }
+        ]
+
         artifacts: Dict[str, Any] = {
-            "symbol_stream": symbol_stream,
-            "bitstream": bitstream,
+            "hypotheses": hypotheses,
+            "raw": {
+                "symbol_stream": symbol_stream,
+                "bitstream": bitstream,
+            },
         }
 
         inputs_prov: Dict[str, Any] = {
