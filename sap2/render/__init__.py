@@ -1,4 +1,0 @@
-"""
-SAP² export package.
-
-"""
