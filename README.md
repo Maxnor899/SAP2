@@ -1,8 +1,8 @@
 # SAP² — Small Audio Post-Processor
 
-## What this project is
+## What this project is, at this very early stage
 
-**SAP²** (Small Audio Post-Processor) is a research-oriented tool designed to explore  
+**SAP²** (Small Audio Post-Processor) is a future research-oriented tool designed to explore  
 **whether known audio decoding methods *could* be applied** to a given signal   
 *before* attempting any actual decoding.
 
